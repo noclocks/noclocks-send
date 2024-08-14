@@ -1,0 +1,81 @@
+services:
+
+  nginx-proxy:
+    container_name: nginx-proxy
+    image: 'jwilder/nginx-proxy:alpine'
+    restart: always
+    ports:
+      - '${LOCAL_HTTP_PORT}:80'
+      - '${LOCAL_HTTPS_PORT}:443'
+    environment:
+      - DEFAULT_HOST=${HOST}
+      - HSTS=off
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - proxy-certs:/etc/nginx/certs:ro
+      - proxy-vhost:/etc/nginx/vhost.d
+      - proxy-html:/usr/share/nginx/html
+
+  proxy-letsencrypt:
+    image: 'jrcs/letsencrypt-nginx-proxy-companion'
+    restart: always
+    environment:
+      - DEFAULT_EMAIL=${LETSENCRYPT_EMAIL}
+      - NGINX_PROXY_CONTAINER=nginx-proxy
+      - NGINX_DOCKER_GEN_CONTAINER=nginx-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - proxy-certs:/etc/nginx/certs
+      - proxy-vhost:/etc/nginx/vhost.d
+      - proxy-html:/usr/share/nginx/html
+
+  send:
+    image: '${DOCKER_SEND_IMAGE}'
+    restart: always
+    ports:
+      - '${PORT}:${PORT}'
+    volumes:
+      - ./uploads:/uploads
+      - $PWD/assets:/app/dist/assets
+    env_file:
+      - .env
+    environment:
+      - VIRTUAL_HOST=${HOST}
+      - VIRTUAL_PORT=1234
+      - DHPARAM_GENERATION=false
+      - LETSENCRYPT_HOST=${LETSENCRYPT_HOST}
+      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
+      - NODE_ENV=${NODE_ENV}
+      - BASE_URL=${BASE_URL}
+      - PORT=${PORT}
+      - REDIS_HOST=${REDIS_HOST}
+
+      # For local uploads storage
+      - FILE_DIR=${FILE_DIR}
+
+      # For S3 object storage (disable volume and FILE_DIR variable)
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - S3_BUCKET=${S3_BUCKET}
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - S3_USE_PATH_STYLE_ENDPOINT=${S3_USE_PATH_STYLE_ENDPOINT}
+
+      # To customize upload limits
+      # - EXPIRE_TIMES_SECONDS=3600,86400,604800,2592000,31536000
+      # - DEFAULT_EXPIRE_SECONDS=3600
+      # - MAX_EXPIRE_SECONDS=31536000
+      # - DOWNLOAD_COUNTS=1,2,5,10,15,25,50,100,1000
+      # - MAX_DOWNLOADS=1000
+      # - MAX_FILE_SIZE=2684354560
+
+  redis:
+    image: 'redis:alpine'
+    restart: always
+    volumes:
+      - send-redis:/data
+
+volumes:
+  send-redis:
+  proxy-certs:
+  proxy-vhost:
+  proxy-html:
